@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Env / secrets
+.env
+*.key
+*.pem
+service-account*.json
+kubeconfig*
+
+# Build
+*.log
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

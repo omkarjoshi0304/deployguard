@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY agent/ ./agent/
+WORKDIR /app/agent
+
+# Cloud Run sends Pub/Sub push to the functions-framework target.
+CMD exec functions-framework --target=handle_pubsub --source=main.py --port=${PORT:-8080}

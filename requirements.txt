@@ -1,0 +1,26 @@
+# --- Agent framework + model ---
+google-adk>=0.2.0
+google-genai>=0.3.0
+
+# --- Google Cloud ---
+google-cloud-firestore>=2.16.0
+google-cloud-pubsub>=2.21.0
+google-cloud-secret-manager>=2.20.0
+
+# --- Cloud Run HTTP entrypoints ---
+functions-framework>=3.5.0
+flask>=3.0.0
+gunicorn>=22.0.0
+
+# --- Kubernetes access ---
+kubernetes>=29.0.0
+
+# --- Slack ---
+slack-sdk>=3.27.0
+
+# --- Data models ---
+pydantic>=2.7.0
+
+# --- Observability ---
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-gcp-trace>=1.6.0
