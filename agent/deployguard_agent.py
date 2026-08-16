@@ -5,8 +5,7 @@ consults incident memory, produces a structured diagnosis + proposed fix, and
 requests human approval via Slack. It NEVER mutates the cluster — that is the
 approver service's job (separation of decide vs. act, ARCHITECTURE.md §3).
 
-NOTE: ADK's public API moves fast. If import paths differ in your installed
-version, adjust the imports below; the agent/tool shape is what matters.
+Verified against google-adk==2.7.0.
 """
 from __future__ import annotations
 
@@ -15,6 +14,7 @@ import os
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.genai import types
 
 from models import FailureEvent
 from tools import git, k8s, memory, slack
@@ -60,13 +60,24 @@ def build_agent() -> Agent:
     )
 
 
+APP_NAME = "deployguard"
+USER_ID = "pubsub"  # single synthetic user; sessions are keyed by incident
+
+
 def triage(message_id: str, event: FailureEvent) -> None:
     """Run one triage turn for a failure event."""
     agent = build_agent()
     session_service = InMemorySessionService()
+    # Runner.run() does not auto-create sessions — create one explicitly,
+    # keyed by the (already deduped) Pub/Sub message_id.
+    session_service.create_session_sync(
+        app_name=APP_NAME,
+        user_id=USER_ID,
+        session_id=message_id,
+    )
     runner = Runner(
         agent=agent,
-        app_name="deployguard",
+        app_name=APP_NAME,
         session_service=session_service,
     )
 
@@ -75,14 +86,25 @@ def triage(message_id: str, event: FailureEvent) -> None:
         f"Event:\n{event.model_dump_json(indent=2)}\n\n"
         "Diagnose and request approval for a fix."
     )
+    message = types.Content(role="user", parts=[types.Part(text=prompt)])
 
-    # ADK Runner is typically async / event-streaming; adapt to your version.
+    # Runner.run() is a sync generator over ADK Events; tool calls (memory
+    # writes, Slack post) happen as a side effect of driving it to completion.
+    #
+    # IMPORTANT: ADK does not raise on model/tool failure — it reports it via
+    # error_code/error_message on the final Event. main.py relies on triage()
+    # raising to mark the incident failed and trigger a Pub/Sub retry, so we
+    # translate that condition into a raised exception here (never swallow,
+    # ARCHITECTURE.md §7.1 #2).
     for adk_event in runner.run(
-        user_id="pubsub",
+        user_id=USER_ID,
         session_id=message_id,
-        new_message=prompt,
+        new_message=message,
     ):
-        # Tool calls (memory writes, Slack post) happen inside the tools.
-        # We iterate to drive the loop to completion and for tracing.
-        if getattr(adk_event, "is_final_response", lambda: False)():
+        if adk_event.is_final_response():
+            if adk_event.error_code:
+                raise RuntimeError(
+                    f"agent run failed: {adk_event.error_code} "
+                    f"{adk_event.error_message}"
+                )
             print(f"[triage-done] {message_id}")
